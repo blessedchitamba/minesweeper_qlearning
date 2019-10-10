@@ -1,6 +1,7 @@
 #pragma once
 #include "cdisccontroller.h"
 #include "CParams.h"
+#include "QValue.h"
 #include "CDiscCollisionObject.h"
 #include <cmath>
 
@@ -11,6 +12,8 @@ class CQLearningController :
 private:
 	uint _grid_size_x;
 	uint _grid_size_y;
+	vector<QValue> QTable;
+	double const discount = 0.8;
 public:
 	CQLearningController(HWND hwndMain);
 	virtual void InitializeLearningAlgorithm(void);
@@ -18,5 +21,6 @@ public:
 	virtual bool Update(void);
 	virtual ~CQLearningController(void);
 	virtual int findObject(uint x, uint y, vector<CDiscCollisionObject*>& m_vecObjects);
+	virtual int getIndex(SVector2D<int> position);	//return the index corresponding to the qtable vector
 };
 

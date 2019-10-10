@@ -33,15 +33,10 @@ void CQLearningController::InitializeLearningAlgorithm(void)
 	//TODO
 	//create a 2D matrix of QValue instances
 	//first dimension is the number of states and second is number of sweepers
-	vector<QValue> QTable;
-	int vecSize = _grid_size_x * _grid_size_y;
+	int vecSize = CParams::WindowWidth * CParams::WindowHeight;
 	for (int i = 0; i < vecSize; i++) {
 		QTable.push_back(QValue());
 	}
-
-	//do the learning loop
-
-
 }
 /**
  The immediate reward function. This computes a reward upon achieving the goal state of
@@ -89,6 +84,10 @@ bool CQLearningController::Update(void)
 		m_iTicks = CParams::iNumTicks;
 	}
 
+	SVector2D<int> position, prevPosition;
+	ROTATION_DIRECTION bestMove{};
+	int reward;
+	float maxQ;
 	for (uint sw = 0; sw < CParams::iNumSweepers; ++sw){
 		if (m_vecSweepers[sw]->isDead()) continue;
 		/**
@@ -96,9 +95,15 @@ bool CQLearningController::Update(void)
 		Watkins, Christopher JCH, and Peter Dayan. "Q-learning." Machine learning 8. 3-4 (1992): 279-292
 		*/
 		//1:::Observe the current state:
-		//TODO
+		//get the m_vposition variable of sweeper
+		position = m_vecSweepers[sw]->Position();
+
 		//2:::Select action with highest historic return:
-		//TODO
+		//in the QTable vector look for the state corresponding to position(x,y)
+		bestMove = QTable[getIndex(position)].bestAction();
+
+		//based on the best move, update the rotation direction of sweeper
+		m_vecSweepers[sw]->setRotation(bestMove);
 		//now call the parents update, so all the sweepers fulfill their chosen action
 	}
 	
@@ -108,7 +113,14 @@ bool CQLearningController::Update(void)
 		if (m_vecSweepers[sw]->isDead()) continue;
 		//TODO:compute your indexes.. it may also be necessary to keep track of the previous state
 		//3:::Observe new state:
-		//TODO
+		//get new position of sweeper and locate its QValue object in QTable. get reward
+		position = m_vecSweepers[sw]->Position();
+		reward = R(position.x, position.y, sw);
+		//get the maxQ value from the current state to be used in updateQ() for previous state
+		maxQ = QTable[getIndex(position)].maxQ();
+		//also get previous position so as to access its previous QTable entry
+		prevPosition = m_vecSweepers[sw]->PrevPosition();
+		QTable[getIndex(prevPosition)].updateQ(reward, discount, bestMove, maxQ);
 		//4:::Update _Q_s_a accordingly:
 		//TODO
 	}
@@ -131,6 +143,11 @@ int CQLearningController::findObject(uint x, uint y, vector<CDiscCollisionObject
 		index++;
 	}
 	return index;
+}
+
+int CQLearningController::getIndex(SVector2D<int> position)
+{
+	return (position.x * CParams::WindowHeight) + position.y;
 }
 
 CQLearningController::~CQLearningController(void)
