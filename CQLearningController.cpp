@@ -14,6 +14,7 @@ for a detailed discussion on Q Learning
 */
 #include "CQLearningController.h"
 #include "QValue.h"
+#include "CCollisionObject.h"
 
 
 CQLearningController::CQLearningController(HWND hwndMain):
@@ -33,7 +34,7 @@ void CQLearningController::InitializeLearningAlgorithm(void)
 	//TODO
 	//create a 2D matrix of QValue instances
 	//first dimension is the number of states and second is number of sweepers
-	int vecSize = CParams::WindowWidth * CParams::WindowHeight;
+	int vecSize = (CParams::WindowWidth+1) * (CParams::WindowHeight+1);
 	for (int i = 0; i < vecSize; i++) {
 		QTable.push_back(QValue());
 	}
@@ -50,15 +51,21 @@ double CQLearningController::R(uint x,uint y, uint sweeper_no){
 	For each action into a supermine -> -50
 	For each other action -> -5
 	*/
+	CCollisionObject::ObjectType objType;
 	int index = findObject(x, y, m_vecObjects);
 	if (index < m_vecObjects.size()) {
-		if (m_vecObjects[index]->getType() == 'Mine') {
+		objType = m_vecObjects[index]->getType();
+		if (!m_vecObjects[index]->isDead() && objType == CCollisionObject::ObjectType::Mine) {
 			//the current object in the objects vector is a mine so reward
 			return 50;
 		}
-		else {
-			//else you've found a super mine or rock: penalize
+		else if(!m_vecObjects[index]->isDead() && objType == CCollisionObject::ObjectType::SuperMine){
+			//else you've found a super mine: penalize
 			return -50;
+		}
+		else {
+			//else the object is dead: just receive a normal -5
+			return -5;
 		}
 	}
 	//else not found, meaning the transition is to an empty position
@@ -99,13 +106,26 @@ bool CQLearningController::Update(void)
 		position = m_vecSweepers[sw]->Position();
 
 		//2:::Select action with highest historic return:
-		//in the QTable vector look for the state corresponding to position(x,y)
-		bestMove = QTable[getIndex(position)].bestAction();
+		//epsilon greedy strategy:
+		float randomFloat = RandFloat();
+		if (randomFloat < epsilon) {
+			//explore
+			bestMove = QTable[getIndex(position)].randomAction();
+		}
+		else {
+			//get the greedy one
+			bestMove = QTable[getIndex(position)].bestAction();
+		}
+		//update the learning rate to decay
+		QTable[getIndex(position)].updateLearningRate(bestMove, learning_rate);
 
 		//based on the best move, update the rotation direction of sweeper
 		m_vecSweepers[sw]->setRotation(bestMove);
 		//now call the parents update, so all the sweepers fulfill their chosen action
 	}
+
+	//update epsilon
+	updateEpsilon();
 	
 	CDiscController::Update(); //call the parent's class update. Do not delete this.
 	
@@ -120,7 +140,8 @@ bool CQLearningController::Update(void)
 		maxQ = QTable[getIndex(position)].maxQ();
 		//also get previous position so as to access its previous QTable entry
 		prevPosition = m_vecSweepers[sw]->PrevPosition();
-		QTable[getIndex(prevPosition)].updateQ(reward, discount, bestMove, maxQ);
+		//QTable[getIndex(prevPosition)].updateLearningRate(bestMove, learning_rate);
+		QTable[getIndex(prevPosition)].updateQ(reward, discount, learning_rate, bestMove, maxQ);
 		//4:::Update _Q_s_a accordingly:
 		//TODO
 	}
@@ -132,6 +153,7 @@ Method checks the vector m_vecObjects to see if it can
 find any with getPosition()==(x,y) and returns its
 index position in the array.
 getPosition() returns a SVector object
+//
 */
 int CQLearningController::findObject(uint x, uint y, vector<CDiscCollisionObject*>& m_vecObjects)
 {
@@ -147,7 +169,12 @@ int CQLearningController::findObject(uint x, uint y, vector<CDiscCollisionObject
 
 int CQLearningController::getIndex(SVector2D<int> position)
 {
-	return (position.x * CParams::WindowHeight) + position.y;
+	return (position.y * CParams::WindowWidth) + position.x;
+}
+
+void CQLearningController::updateEpsilon()
+{
+	epsilon = 1 / (1 - epsilon);
 }
 
 CQLearningController::~CQLearningController(void)
